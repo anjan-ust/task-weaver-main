@@ -285,17 +285,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Kanban Board */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">Task Board</h2>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
-              {tasks.length} tasks
-            </span>
-          </div>
-        </div>
-        <TaskBoard onTasksUpdated={() => setRefreshCounter((c) => c + 1)} />
-      </div>
+      <TaskBoard onTasksUpdated={() => setRefreshCounter((c) => c + 1)} />
     </div>
   );
 };

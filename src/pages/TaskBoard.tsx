@@ -38,6 +38,7 @@ import {
 import remarkApi from "@/services/remarkApi";
 import { formatDistanceToNow } from "date-fns";
 import api from "@/services/api";
+import CreateTask from "@/pages/CreateTask";
 
 const TaskBoard: React.FC<{ onTasksUpdated?: () => void }> = ({
   onTasksUpdated,
@@ -73,12 +74,12 @@ const TaskBoard: React.FC<{ onTasksUpdated?: () => void }> = ({
   const [allTasks, setAllTasks] = useState<Task[]>([]);
   const [viewMode, setViewMode] = useState<
     "created" | "assigned" | "reviewer" | "all"
-  >(currentRole === "manager" ? "created" : "all");
+  >("all");
 
   // Reset view mode when role toggles
   useEffect(() => {
-    if (currentRole === "manager") setViewMode("created");
-    else setViewMode("all");
+    // Default to showing all tasks for all roles
+    setViewMode("all");
   }, [currentRole]);
   const [employeeNames, setEmployeeNames] = useState<Record<string, string>>(
     {}
@@ -208,6 +209,7 @@ const TaskBoard: React.FC<{ onTasksUpdated?: () => void }> = ({
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [remarksOnlyTask, setRemarksOnlyTask] = useState<Task | null>(null);
   const [remarks, setRemarks] = useState<any[]>([]);
+  const [remarkCounts, setRemarkCounts] = useState<Record<string, number>>({});
   const [newComment, setNewComment] = useState("");
   const [newFile, setNewFile] = useState<File | null>(null);
   const [loadingRemarks, setLoadingRemarks] = useState(false);
@@ -221,6 +223,7 @@ const TaskBoard: React.FC<{ onTasksUpdated?: () => void }> = ({
   );
   const [imageModalUrl, setImageModalUrl] = useState<string | null>(null);
   const [imageModalAlt, setImageModalAlt] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // When a task is opened, eagerly resolve assignedTo and reviewer names into cache
   useEffect(() => {
@@ -343,6 +346,45 @@ const TaskBoard: React.FC<{ onTasksUpdated?: () => void }> = ({
       priorityFilter === "all" || task.priority === priorityFilter;
     return matchesSearch && matchesPriority;
   });
+
+  // Compute remark counts for visible tasks so Kanban/TaskCard can show badges
+  useEffect(() => {
+    let mounted = true;
+    const loadCounts = async () => {
+      try {
+        const backendRoleMap: { [k: string]: string } = {
+          admin: "Admin",
+          manager: "Manager",
+          developer: "Developer",
+        };
+        const backendRole = backendRoleMap[currentRole] || "Developer";
+        const loaders = filteredTasks.map(async (t) => {
+          try {
+            const taskId = parseInt(t.id, 10);
+            const resp = await remarkApi.getRemarksByTask(taskId, backendRole);
+            return { id: t.id, count: (resp && resp.length) || 0 };
+          } catch (e) {
+            return { id: t.id, count: 0 };
+          }
+        });
+
+        const results = await Promise.all(loaders);
+        if (!mounted) return;
+        const map: Record<string, number> = {};
+        for (const r of results) map[r.id] = r.count;
+        setRemarkCounts(map);
+      } catch (e) {
+        // ignore failures; keep counts empty
+        if (mounted) setRemarkCounts({});
+      }
+    };
+    if (filteredTasks.length > 0) loadCounts();
+    else setRemarkCounts({});
+
+    return () => {
+      mounted = false;
+    };
+  }, [filteredTasks, currentRole]);
 
   const handleTaskClick = (task: Task) => {
     setSelectedTask(task);
@@ -1162,6 +1204,8 @@ const TaskBoard: React.FC<{ onTasksUpdated?: () => void }> = ({
                 setRemarksOnlyTask(t);
                 setSelectedTask(null);
               }}
+              remarkCounts={remarkCounts}
+              onAddTask={() => setShowCreateModal(true)}
               onTaskMove={handleTaskMove}
             />
           </div>
@@ -1399,6 +1443,13 @@ const TaskBoard: React.FC<{ onTasksUpdated?: () => void }> = ({
                 </div>
               </>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Create Task modal (opened from Kanban + button) */}
+        <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+          <DialogContent className="max-w-4xl h-[85vh] overflow-auto">
+            <CreateTask onClose={() => setShowCreateModal(false)} hideHeader />
           </DialogContent>
         </Dialog>
 

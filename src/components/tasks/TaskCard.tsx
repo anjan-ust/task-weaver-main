@@ -47,6 +47,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
 }) => {
   const { currentRole } = useAuth();
   const [assigneeName, setAssigneeName] = useState<string | null>(null);
+  const [reviewerName, setReviewerName] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -74,6 +75,34 @@ const TaskCard: React.FC<TaskCardProps> = ({
       mounted = false;
     };
   }, [task.assignedTo, currentRole]);
+
+  // Load reviewer name (if any) for display
+  useEffect(() => {
+    let mounted = true;
+    const loadReviewer = async () => {
+      if (!task.reviewer) return;
+      try {
+        const backendRoleMap: { [k: string]: string } = {
+          admin: "Admin",
+          manager: "Manager",
+          developer: "Developer",
+        };
+        const backendRole = backendRoleMap[currentRole] || "Developer";
+        const emp = await employeeService.getEmployeeCached(
+          parseInt(String(task.reviewer), 10),
+          backendRole
+        );
+        if (!mounted) return;
+        setReviewerName(emp?.name || null);
+      } catch (err) {
+        console.error("Error loading reviewer", err);
+      }
+    };
+    loadReviewer();
+    return () => {
+      mounted = false;
+    };
+  }, [task.reviewer, currentRole]);
   const priority = priorityConfig[task.priority];
   const status = statusConfig[task.status];
   const highPriorityCardClass =
@@ -133,7 +162,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="pt-0 space-y-3">
+      <CardContent className="pt-0 space-y-3 px-4">
         <h3 className="font-medium text-sm leading-snug line-clamp-2 group-hover:text-primary transition-colors">
           {task.title}
         </h3>
@@ -142,9 +171,66 @@ const TaskCard: React.FC<TaskCardProps> = ({
           {task.description}
         </p>
 
-        <div className="flex items-center justify-between pt-2 border-t border-border/50">
-          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1">
+        <div className="flex items-center justify-between pt-2 border-t border-border/50 gap-6 min-w-0">
+          {/* Left: avatars (assignee, reviewer) */}
+          <div className="flex items-center gap-3 flex-none">
+            {assigneeName ? (
+              <Avatar className="h-6 w-6">
+                <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                  {assigneeName
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")}
+                </AvatarFallback>
+              </Avatar>
+            ) : (
+              <div className="h-6 w-6 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
+                <User className="h-3 w-3 text-muted-foreground/50" />
+              </div>
+            )}
+
+            {reviewerName ? (
+              <Avatar className="h-6 w-6">
+                <AvatarFallback className="text-xs bg-primary/10 text-primary">
+                  {reviewerName
+                    .split(" ")
+                    .map((n) => n[0])
+                    .join("")}
+                </AvatarFallback>
+              </Avatar>
+            ) : (
+              <div className="h-6 w-6" />
+            )}
+          </div>
+
+          {/* Center: message icon with badge */}
+          <div className="flex-1 flex items-center justify-center min-w-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onOpenRemarks) onOpenRemarks();
+                else onClick?.();
+              }}
+              className="flex items-center justify-center text-muted-foreground hover:text-primary px-2"
+              aria-label={
+                typeof remarkCount === "number"
+                  ? `${remarkCount} remarks`
+                  : "0 remarks"
+              }
+            >
+              <span className="relative inline-flex items-center">
+                <MessageSquare className="h-4 w-4" />
+                <span className="absolute top-0 right-0 transform translate-x-3 -translate-y-1/2 inline-flex items-center justify-center min-w-[18px] h-4 px-1.5 rounded-full bg-destructive text-white text-[10px] leading-none">
+                  {typeof remarkCount === "number" ? remarkCount : 0}
+                </span>
+              </span>
+            </button>
+          </div>
+
+          {/* Right: due date and optional due badge */}
+          <div className="flex items-center justify-end gap-2 text-xs text-muted-foreground flex-none max-w-[45%]">
+            <div className="flex items-center gap-2">
               <Calendar className="h-3 w-3" />
               <span>{format(new Date(task.expectedClosure), "MMM d")}</span>
               {dueBadgeLabel && (
@@ -156,39 +242,7 @@ const TaskCard: React.FC<TaskCardProps> = ({
                 </Badge>
               )}
             </div>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // If a dedicated remarks opener is provided, call it; otherwise fall back to card click
-                  if (onOpenRemarks) onOpenRemarks();
-                  else onClick?.();
-                }}
-                className="flex items-center gap-1 text-muted-foreground hover:text-primary"
-              >
-                <MessageSquare className="h-3 w-3" />
-                <span className="text-xs">
-                  {typeof remarkCount === "number" ? remarkCount : 0}
-                </span>
-              </button>
-            </div>
           </div>
-
-          {assigneeName ? (
-            <Avatar className="h-6 w-6">
-              <AvatarFallback className="text-xs bg-primary/10 text-primary">
-                {assigneeName
-                  .split(" ")
-                  .map((n) => n[0])
-                  .join("")}
-              </AvatarFallback>
-            </Avatar>
-          ) : (
-            <div className="h-6 w-6 rounded-full border-2 border-dashed border-muted-foreground/30 flex items-center justify-center">
-              <User className="h-3 w-3 text-muted-foreground/50" />
-            </div>
-          )}
         </div>
       </CardContent>
     </Card>
