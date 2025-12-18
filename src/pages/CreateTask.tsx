@@ -43,7 +43,12 @@ interface TaskFormData {
   expected_closure: string;
 }
 
-const CreateTask: React.FC = () => {
+interface CreateTaskProps {
+  onClose?: () => void;
+  hideHeader?: boolean;
+}
+
+const CreateTask: React.FC<CreateTaskProps> = ({ onClose, hideHeader }) => {
   const navigate = useNavigate();
   const { user, currentRole } = useAuth();
   const { toast } = useToast();
@@ -134,7 +139,49 @@ const CreateTask: React.FC = () => {
             }
           })
         );
-        setManagers(detailed);
+        let mgrList = detailed || [];
+
+        // If the current user is a Manager or Admin, include them in reviewer options
+        // and default the reviewer to the creator (so the dropdown auto-selects the creator)
+        try {
+          if (
+            (currentRole === "manager" || currentRole === "admin") &&
+            user?.id
+          ) {
+            const myEid = parseInt(user.id, 10);
+            const already = mgrList.find((m) => m.e_id === myEid);
+            if (!already) {
+              try {
+                const me = await employeeService.getEmployeeById(
+                  myEid,
+                  backendRole
+                );
+                if (me) mgrList = [me, ...mgrList];
+              } catch (e) {
+                // if we can't fetch full employee, still add a minimal entry
+                mgrList = [
+                  {
+                    e_id: myEid,
+                    name: `User ${myEid}`,
+                    email: "",
+                    designation: currentRole === "admin" ? "Admin" : "Manager",
+                  },
+                  ...mgrList,
+                ];
+              }
+            }
+
+            // set default reviewer to creator if not already set
+            setFormData((prev) => ({
+              ...prev,
+              reviewer: prev.reviewer ?? myEid,
+            }));
+          }
+        } catch (e) {
+          // ignore fallback errors
+        }
+
+        setManagers(mgrList);
       } catch (err) {
         console.error("Failed to load managers for reviewer dropdown", err);
         setManagers([]);
@@ -219,8 +266,9 @@ const CreateTask: React.FC = () => {
         variant: "default",
       });
 
-      // Navigate back to dashboard
-      navigate("/dashboard");
+      // Navigate back to dashboard or call onClose when embedded
+      if (onClose) onClose();
+      else navigate("/dashboard");
     } catch (error: any) {
       console.error("Error creating task:", error);
       toast({
@@ -260,23 +308,25 @@ const CreateTask: React.FC = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate("/dashboard")}
-          className="hover:bg-secondary"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Create New Task</h1>
-          <p className="text-muted-foreground mt-1">
-            Fill in the details below to create a new task
-          </p>
+      {/* Header (optional in embedded mode) */}
+      {!hideHeader && (
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => (onClose ? onClose() : navigate("/dashboard"))}
+            className="hover:bg-secondary"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">Create New Task</h1>
+            <p className="text-muted-foreground mt-1">
+              Fill in the details below to create a new task
+            </p>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Form Card */}
       <Card className="border-border shadow-lg">

@@ -79,9 +79,13 @@ export const employeeService = {
   // Update employee
   updateEmployee: async (
     e_id: number,
-    employee: Partial<EmployeeCreateRequest>
+    employee: Partial<EmployeeCreateRequest>,
+    role?: string
   ): Promise<Employee> => {
-    const response = await api.put(`/Employee/update?id=${e_id}`, employee);
+    const url = role
+      ? `/Employee/update?id=${e_id}&role=${encodeURIComponent(role)}`
+      : `/Employee/update?id=${e_id}`;
+    const response = await api.put(url, employee);
     return response.data;
   },
 

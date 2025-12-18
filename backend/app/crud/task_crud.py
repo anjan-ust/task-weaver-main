@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy import or_
 from fastapi import HTTPException
 from datetime import datetime, timezone
+import logging
 
 
 def add_task(new_task: TaskReqRes, role, user):
@@ -101,13 +102,22 @@ def get_task_by_id(t_id: int, user):
         t = session.query(TaskSchema).filter(TaskSchema.t_id == t_id).first()
         if not t:
             raise HTTPException(status_code=404, detail="Task Not Found")
-        
-        
+        # Authorization logic:
+        # - Admin can view any task
+        # - Manager can view if they are the reviewer, the creator, or the assigner
+        # - Developers (and others) can view only if they are the assigned_to
         if "Admin" not in user.roles:
-            if "Manager" in user.roles and t.reviewer != user.e_id:
-                raise HTTPException(status_code=403, detail="Not authorized to view this task")
-            elif t.assigned_to != user.e_id:
-                raise HTTPException(status_code=403, detail="Not authorized to view this task")
+            if "Manager" in user.roles:
+                if not (
+                    t.reviewer == user.e_id
+                    or t.created_by == user.e_id
+                    or t.assigned_by == user.e_id
+                ):
+                    raise HTTPException(status_code=403, detail="Not authorized to view this task")
+            else:
+                # Non-manager (e.g., developer) must be the assignee
+                if t.assigned_to != user.e_id:
+                    raise HTTPException(status_code=403, detail="Not authorized to view this task")
         # Optional: Add authorization check
         # Uncomment if you want to restrict access based on user role
         # if "Admin" not in user.role:
@@ -158,13 +168,16 @@ def update_task(
         if not t:
             raise HTTPException(status_code=404, detail="Task not found")
 
+        # Log incoming update for debugging
+        logging.info(f"update_task called t_id={t_id} assigned_to={assigned_to} priority={priority} status={status} reviewer={reviewer} expected_closure={expected_closure}")
+        logging.info(f"existing task: assigned_to={t.assigned_to} assigned_by={t.assigned_by} reviewer={t.reviewer} status={t.status}")
 
         # Update fields if provided
         if title:
             t.title = title
         if description:
             t.description = description
-        if assigned_to:
+        if assigned_to is not None:
             assigned_user = get_user_by_id(assigned_to)
             if not assigned_user:
                 raise HTTPException(status_code=404, detail="Assigned user not found")
@@ -180,7 +193,7 @@ def update_task(
         if status:
             patch_status(t_id=t_id, status=status, role=role, user=user, session=session)
             t.status = status
-        if reviewer:
+        if reviewer is not None:
             reviewer_user = get_user_by_id(reviewer)
             if not reviewer_user:
                 raise HTTPException(status_code=404, detail="Reviewer not found")
@@ -198,6 +211,7 @@ def update_task(
 
         # Commit the transaction
         session.commit()
+        logging.info(f"update_task committed for t_id={t_id}")
         session.refresh(t)
 
         # Return updated task as a response

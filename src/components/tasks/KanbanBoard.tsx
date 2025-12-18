@@ -29,6 +29,8 @@ import { CSS } from "@dnd-kit/utilities";
 interface KanbanBoardProps {
   tasks: Task[];
   onTaskClick?: (task: Task) => void;
+  onOpenRemarks?: (task: Task) => void;
+  remarkCounts?: Record<string, number>;
   onAddTask?: (status: TaskStatus) => void;
   onTaskMove?: (taskId: string, newStatus: TaskStatus) => void;
 }
@@ -69,7 +71,9 @@ const columns: {
 const SortableTaskCard: React.FC<{
   task: Task;
   onClick?: () => void;
-}> = ({ task, onClick }) => {
+  onOpenRemarks?: () => void;
+  remarkCount?: number;
+}> = ({ task, onClick, onOpenRemarks, remarkCount }) => {
   const {
     attributes,
     listeners,
@@ -95,7 +99,12 @@ const SortableTaskCard: React.FC<{
         isDragging && "opacity-50 scale-105 z-50"
       )}
     >
-      <TaskCard task={task} onClick={onClick} />
+      <TaskCard
+        task={task}
+        onClick={onClick}
+        onOpenRemarks={onOpenRemarks}
+        remarkCount={remarkCount}
+      />
     </div>
   );
 };
@@ -108,7 +117,18 @@ const DroppableColumn: React.FC<{
   onTaskClick?: (task: Task) => void;
   onAddTask?: (status: TaskStatus) => void;
   isOver?: boolean;
-}> = ({ column, tasks, canCreateTask, onTaskClick, onAddTask, isOver }) => {
+  onOpenRemarks?: (task: Task) => void;
+  remarkCounts?: Record<string, number>;
+}> = ({
+  column,
+  tasks,
+  canCreateTask,
+  onTaskClick,
+  onAddTask,
+  isOver,
+  onOpenRemarks,
+  remarkCounts,
+}) => {
   const { setNodeRef, isOver: overDroppable } = useDroppable({ id: column.id });
 
   return (
@@ -157,6 +177,8 @@ const DroppableColumn: React.FC<{
               <SortableTaskCard
                 task={task}
                 onClick={() => onTaskClick?.(task)}
+                onOpenRemarks={() => onOpenRemarks?.(task)}
+                remarkCount={remarkCounts ? remarkCounts[task.id] ?? 0 : 0}
               />
             </div>
           ))}
@@ -180,6 +202,8 @@ const DroppableColumn: React.FC<{
 const KanbanBoard: React.FC<KanbanBoardProps> = ({
   tasks,
   onTaskClick,
+  onOpenRemarks,
+  remarkCounts,
   onAddTask,
   onTaskMove,
 }) => {
@@ -262,6 +286,8 @@ const KanbanBoard: React.FC<KanbanBoardProps> = ({
               tasks={columnTasks}
               canCreateTask={canCreateTask}
               onTaskClick={onTaskClick}
+              remarkCounts={remarkCounts}
+              onOpenRemarks={onOpenRemarks}
               onAddTask={onAddTask}
               isOver={
                 overId === column.id || columnTasks.some((t) => t.id === overId)

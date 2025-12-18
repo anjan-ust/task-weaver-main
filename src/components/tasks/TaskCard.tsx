@@ -7,11 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Calendar, MessageSquare, User } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format } from "date-fns";
+import { format, differenceInCalendarDays } from "date-fns";
 
 interface TaskCardProps {
   task: Task;
   onClick?: () => void;
+  onOpenRemarks?: () => void;
+  remarkCount?: number;
 }
 
 const priorityConfig: Record<Priority, { label: string; className: string }> = {
@@ -37,7 +39,12 @@ const statusConfig: Record<TaskStatus, { color: string }> = {
   done: { color: "bg-status-done" },
 };
 
-const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
+const TaskCard: React.FC<TaskCardProps> = ({
+  task,
+  onClick,
+  onOpenRemarks,
+  remarkCount,
+}) => {
   const { currentRole } = useAuth();
   const [assigneeName, setAssigneeName] = useState<string | null>(null);
 
@@ -69,11 +76,39 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
   }, [task.assignedTo, currentRole]);
   const priority = priorityConfig[task.priority];
   const status = statusConfig[task.status];
+  const highPriorityCardClass =
+    task.priority === "high"
+      ? "ring-2 ring-red-500/40 border-red-400 shadow-[0_10px_30px_rgba(239,68,68,0.12)] pulse-red-glow"
+      : "";
+
+  // Deadline highlighting
+  const daysLeft = differenceInCalendarDays(
+    new Date(task.expectedClosure),
+    new Date()
+  );
+  let dueCardClass = "";
+  let dueBadgeLabel: string | null = null;
+  let dueBadgeClass = "text-xs";
+  if (daysLeft < 0) {
+    // overdue
+    dueCardClass =
+      "ring-2 ring-red-600/50 border-transparent shadow-[0_12px_36px_rgba(220,38,38,0.18)]";
+    dueBadgeLabel = `Overdue ${Math.abs(daysLeft)}d`;
+    dueBadgeClass = "bg-destructive/10 text-destructive border-destructive/20";
+  } else if (daysLeft <= 2) {
+    // within 2 days warning
+    dueCardClass =
+      "ring-2 ring-amber-400/40 border-transparent shadow-[0_8px_24px_rgba(245,158,11,0.12)]";
+    dueBadgeLabel = `Due in ${daysLeft}d`;
+    dueBadgeClass = "bg-amber-100 text-amber-700 border-amber-200";
+  }
 
   return (
     <Card
       className={cn(
-        "cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 bg-card border border-border group animate-fade-in"
+        "cursor-pointer transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 bg-card border border-border group animate-fade-in",
+        highPriorityCardClass,
+        dueCardClass
       )}
       onClick={onClick}
     >
@@ -112,10 +147,31 @@ const TaskCard: React.FC<TaskCardProps> = ({ task, onClick }) => {
             <div className="flex items-center gap-1">
               <Calendar className="h-3 w-3" />
               <span>{format(new Date(task.expectedClosure), "MMM d")}</span>
+              {dueBadgeLabel && (
+                <Badge
+                  variant="outline"
+                  className={cn("ml-2 px-2 py-0.5 rounded-full", dueBadgeClass)}
+                >
+                  {dueBadgeLabel}
+                </Badge>
+              )}
             </div>
             <div className="flex items-center gap-1">
-              <MessageSquare className="h-3 w-3" />
-              <span>0</span>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // If a dedicated remarks opener is provided, call it; otherwise fall back to card click
+                  if (onOpenRemarks) onOpenRemarks();
+                  else onClick?.();
+                }}
+                className="flex items-center gap-1 text-muted-foreground hover:text-primary"
+              >
+                <MessageSquare className="h-3 w-3" />
+                <span className="text-xs">
+                  {typeof remarkCount === "number" ? remarkCount : 0}
+                </span>
+              </button>
             </div>
           </div>
 

@@ -17,26 +17,21 @@ def _is_developer(user) -> bool:
 
 
 def add_remark(task_id: int, comment: str, e_id: int, file=None, role: str = None, user=None):
-    """Add a remark for a task with authorization checks based on task status and user role."""
+    """Add a remark for a task. Allow any role/phase to create a remark (development/dev requirement).
+
+    The function will persist the optional file to GridFS and store both `created_by` and `e_id`
+    fields so downstream code that expects either name will work.
+    """
     session: Session = get_connection()
     try:
         task = session.query(TaskSchema).filter(TaskSchema.t_id == task_id).first()
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
 
-        task_status = (task.status or "").upper()
+        # Allow any role and any task phase to create remarks. This simplifies client workflows
+        # and delegates fine-grained permission checks to higher-level business logic when needed.
 
-        # Authorization based on task status
-        if task_status == "REVIEW":
-            if not _is_manager(user):
-                raise HTTPException(status_code=403, detail="Only managers can add remarks in the REVIEW phase.")
-        elif task_status == "IN_PROGRESS":
-            if not _is_developer(user):
-                raise HTTPException(status_code=403, detail="Only developers can add remarks in the IN_PROGRESS phase.")
-        else:
-            raise HTTPException(status_code=400, detail="Task phase does not allow adding remarks.")
-
-        # Handle file upload
+        # Handle file upload (optional)
         file_id = None
         file_name = None
         if file:
@@ -46,16 +41,22 @@ def add_remark(task_id: int, comment: str, e_id: int, file=None, role: str = Non
         remark = {
             "task_id": task_id,
             "comment": comment,
+            # store both keys for compatibility with existing checks elsewhere in the repo
             "created_by": e_id,
+            "e_id": e_id,
+            "role": role,
             "file_id": file_id,
             "file_name": file_name,
             "created_at": datetime.now(timezone.utc),
-               }
+        }
         result = remarks_collection.insert_one(remark)
         remark["_id"] = result.inserted_id
         return serialize_mongo(remark)
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(e)
+        # wrap unexpected errors
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         session.close()
  

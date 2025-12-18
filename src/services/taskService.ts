@@ -97,10 +97,34 @@ export const taskService = {
     task: TaskUpdateRequest,
     role: string
   ): Promise<Task> => {
-    const response = await api.put(
-      `/Task/update?id=${t_id}&role=${role}`,
-      task
-    );
+    // Backend expects simple fields as query params (not JSON body) for this endpoint.
+    const params: string[] = [
+      `t_id=${encodeURIComponent(String(t_id))}`,
+      `role=${encodeURIComponent(role)}`,
+    ];
+    if (task.title !== undefined)
+      params.push(`title=${encodeURIComponent(String(task.title))}`);
+    if (task.description !== undefined)
+      params.push(
+        `description=${encodeURIComponent(String(task.description))}`
+      );
+    if (task.assigned_to !== undefined)
+      params.push(
+        `assigned_to=${encodeURIComponent(String(task.assigned_to))}`
+      );
+    if (task.priority !== undefined)
+      params.push(`priority=${encodeURIComponent(String(task.priority))}`);
+    if (task.status !== undefined)
+      params.push(`status=${encodeURIComponent(String(task.status))}`);
+    if (task.reviewer !== undefined)
+      params.push(`reviewer=${encodeURIComponent(String(task.reviewer))}`);
+    if (task.expected_closure !== undefined)
+      params.push(
+        `expected_closure=${encodeURIComponent(String(task.expected_closure))}`
+      );
+
+    const url = `/Task/update?${params.join("&")}`;
+    const response = await api.put(url, {});
     return response.data;
   },
 

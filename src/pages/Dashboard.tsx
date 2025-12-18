@@ -4,8 +4,16 @@ import { useAuth } from "@/context/AuthContext";
 import { taskService } from "@/services/taskService";
 import { mapBackendTaskToFrontend } from "@/lib/utils";
 import StatsCard from "@/components/dashboard/StatsCard";
-import KanbanBoard from "@/components/tasks/KanbanBoard";
+import TaskBoard from "@/pages/TaskBoard";
+import CreateTask from "@/pages/CreateTask";
 import { employeeService } from "@/services/employeeService";
+import {
+  Dialog,
+  DialogContent,
+  DialogTrigger,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import {
   ListTodo,
@@ -26,6 +34,8 @@ const Dashboard: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [employeeName, setEmployeeName] = useState<string>("");
   const [employeesCount, setEmployeesCount] = useState<number>(0);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [refreshCounter, setRefreshCounter] = useState(0);
   // Fetch the logged-in user's full name from backend employees table
   useEffect(() => {
     let mounted = true;
@@ -53,7 +63,10 @@ const Dashboard: React.FC = () => {
       }
     };
 
-    // Fetch tasks assigned to the logged-in user
+    // Fetch tasks for stats. Mirror TaskBoard behavior per role:
+    // - developer: tasks assigned to that developer
+    // - manager: tasks created by the manager OR where the manager is reviewer
+    // - admin: all tasks
     const fetchMyTasks = async () => {
       if (!user?.id) return;
       try {
@@ -64,10 +77,44 @@ const Dashboard: React.FC = () => {
         };
         const backendRole = backendRoleMap[currentRole] || "Developer";
         const e_id = parseInt(user.id, 10);
-        const backendTasks = await taskService.getMyTasks(e_id, backendRole);
-        if (!mounted) return;
-        const frontTasks = backendTasks.map(mapBackendTaskToFrontend);
-        setTasks(frontTasks);
+
+        if (currentRole === "developer") {
+          // tasks assigned to this developer
+          const backendTasks = await taskService.getMyTasks(e_id, backendRole);
+          if (!mounted) return;
+          const frontTasks = backendTasks.map(mapBackendTaskToFrontend);
+          setTasks(frontTasks);
+        } else if (currentRole === "manager") {
+          // tasks where createdBy === manager OR reviewer === manager
+          const tasksResp = await taskService.getTasks(
+            1,
+            1000,
+            undefined,
+            undefined,
+            backendRole
+          );
+          const backendTasks = tasksResp.data || [];
+          if (!mounted) return;
+          const frontTasksAll = backendTasks.map(mapBackendTaskToFrontend);
+          const myIdStr = String(e_id);
+          const filtered = frontTasksAll.filter(
+            (t) => t.createdBy === myIdStr || t.reviewer === myIdStr
+          );
+          setTasks(filtered);
+        } else {
+          // admin or other roles: show all tasks
+          const tasksResp = await taskService.getTasks(
+            1,
+            1000,
+            undefined,
+            undefined,
+            backendRole
+          );
+          const backendTasks = tasksResp.data || [];
+          if (!mounted) return;
+          const frontTasksAll = backendTasks.map(mapBackendTaskToFrontend);
+          setTasks(frontTasksAll);
+        }
       } catch (err) {
         console.error("Error fetching tasks:", err);
       }
@@ -96,10 +143,15 @@ const Dashboard: React.FC = () => {
 
     fetchEmployeeName();
 
+    // re-run when refreshCounter changes (triggered by child updates)
+    // note: fetchMyTasks is already invoked above; including refreshCounter in deps
+    // ensures parent re-fetches when TaskBoard signals an update
+    // (we call fetchMyTasks again below via effect dependency)
+
     return () => {
       mounted = false;
     };
-  }, [user?.id, user?.name]);
+  }, [user?.id, user?.name, currentRole, showCreateModal, refreshCounter]);
   // Calculate stats
   const totalTasks = tasks.length;
   const todoTasks = tasks.filter((t) => t.status === "todo").length;
@@ -193,14 +245,29 @@ const Dashboard: React.FC = () => {
           </p>
         </div>
         {(currentRole === "admin" || currentRole === "manager") && (
-          <Button
-            variant="gradient"
-            className="gap-2"
-            onClick={() => navigate("/create-task")}
-          >
-            <ListTodo className="h-4 w-4" />
-            Create Task
-          </Button>
+          <>
+            <Button
+              variant="gradient"
+              className="gap-2"
+              onClick={() => {
+                if (currentRole === "manager") setShowCreateModal(true);
+                else navigate("/create-task");
+              }}
+            >
+              <ListTodo className="h-4 w-4" />
+              Create Task
+            </Button>
+
+            {/* Create Task modal for managers */}
+            <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+              <DialogContent className="max-w-4xl h-[85vh] overflow-auto">
+                <CreateTask
+                  onClose={() => setShowCreateModal(false)}
+                  hideHeader
+                />
+              </DialogContent>
+            </Dialog>
+          </>
         )}
       </div>
 
@@ -227,11 +294,7 @@ const Dashboard: React.FC = () => {
             </span>
           </div>
         </div>
-        <KanbanBoard
-          tasks={tasks}
-          onTaskClick={handleTaskClick}
-          onTaskMove={handleTaskMove}
-        />
+        <TaskBoard onTasksUpdated={() => setRefreshCounter((c) => c + 1)} />
       </div>
     </div>
   );

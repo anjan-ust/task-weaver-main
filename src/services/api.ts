@@ -19,6 +19,12 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // Debug: log outgoing requests
+    // eslint-disable-next-line no-console
+    console.debug("API request", {
+      method: config.method,
+      url: config.baseURL + config.url,
+    });
     return config;
   },
   (error) => {

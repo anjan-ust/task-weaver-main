@@ -19,6 +19,8 @@ class RemarkReqRes(BaseModel):
     _id: Optional[str] = None
     task_id: int = Field(...)
     comment: str = Field(..., max_length=1000)
+    file_id : Optional[str] = None
+    file_name : Optional[str] = None
     created_by: Optional[int] = None
     created_at: Optional[datetime] = None
 
