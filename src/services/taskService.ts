@@ -66,14 +66,22 @@ export const taskService = {
     const url = `/Task/getall${
       role ? `?role=${encodeURIComponent(role)}` : ""
     }`;
-    const response = await api.get(url);
-    const data: Task[] = response.data || [];
-    return {
-      data,
-      total: data.length,
-      page,
-      limit,
-    };
+    try {
+      const response = await api.get(url);
+      const data: Task[] = response.data || [];
+      return {
+        data,
+        total: data.length,
+        page,
+        limit,
+      };
+    } catch (err: any) {
+      // If backend returns 404 when there are no tasks, treat it as empty result
+      if (err?.response?.status === 404) {
+        return { data: [], total: 0, page, limit };
+      }
+      throw err;
+    }
   },
 
   // Get task by ID
@@ -156,19 +164,29 @@ export const taskService = {
     const url = `/Task/getbystatus?status=${encodeURIComponent(
       status as unknown as string
     )}${role ? `&role=${encodeURIComponent(role)}` : ""}`;
-    const response = await api.get(url);
-    return response.data || [];
+    try {
+      const response = await api.get(url);
+      return response.data || [];
+    } catch (err: any) {
+      if (err?.response?.status === 404) return [];
+      throw err;
+    }
   },
 
   // Get my tasks (assigned to current user)
   // Note: backend exposes role-based listing via /Task/getall; use getTasks/getTasksByStatus
   getMyTasks: async (e_id: number, role?: string): Promise<Task[]> => {
-    const resp = await api.get(
-      `/Task/getall${role ? `?role=${encodeURIComponent(role)}` : ""}`
-    );
-    const data: Task[] = resp.data || [];
-    // filter client-side for assigned_to
-    return data.filter((t) => t.assigned_to === e_id) || [];
+    try {
+      const resp = await api.get(
+        `/Task/getall${role ? `?role=${encodeURIComponent(role)}` : ""}`
+      );
+      const data: Task[] = resp.data || [];
+      // filter client-side for assigned_to
+      return data.filter((t) => t.assigned_to === e_id) || [];
+    } catch (err: any) {
+      if (err?.response?.status === 404) return [];
+      throw err;
+    }
   },
 
   // Get tasks created by user (client-side filter)
